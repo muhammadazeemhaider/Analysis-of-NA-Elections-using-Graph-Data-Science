@@ -99,9 +99,6 @@ def generate_pie_chart(root, data_json):
     canvas.draw()
     canvas.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-
-    
-
 def open_summary_window():
     summary_window = tk.Toplevel()
     summary_window.title('Summary Analysis')
