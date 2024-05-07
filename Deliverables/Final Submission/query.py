@@ -1,5 +1,13 @@
 from neo4j import GraphDatabase
 from graphdatascience import GraphDataScience
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
+
 # import gds
 
 uri = "bolt://localhost:7687"
@@ -153,116 +161,171 @@ def find_top_candidate_by_vote_share():
     
     session.close()
 
-def get_pageRank():
-    with driver.session() as session:
-        # session.run('CALL gds.graph.drop("elections_graph")')
-        # Create the graph projection
-        # session.run(
-        #     '''
-        #     CALL gds.graph.project(
-        #         'elections_graph',
-        #         {
-        #             Candidate: {label: 'Candidate', properties: []},
-        #             Political_Party: {label: 'Political_Party', properties: []},
-        #             Constituency: {label: 'Constituency', properties: []}
-        #         },
-        #         {
-        #             CONTESTED_BY: {
-        #                 orientation: 'NATURAL',
-        #                 aggregation: 'NONE',
-        #                 type: 'CONTESTED_BY',
-        #                 properties: ['candidate_votes', 'candidate_share', 'outcome']
-        #             },
-        #             AFFILIATED_WITH: {
-        #                 orientation: 'UNDIRECTED',
-        #                 aggregation: 'NONE',
-        #                 type: 'AFFILIATED_WITH',
-        #                 properties: []
-        #             }
-        #         }
-        #     )
-        #     '''
-        # )
-        session.run(
-            '''
-                    CALL gds.graph.project(
-            'elections_graph',   // Name of the graph projection
-            {   // Node projections
-                Candidate: {label: 'Candidate', properties: []},
-                Constituency: {label: 'Constituency', properties: []}
-            },
-            {   // Relationship projections
-                CONTESTED_BY: {
-                    type: 'CONTESTED_BY',  // Specify the type of relationship
-                    orientation: 'NATURAL',  // Directed from one node type to another
-                    properties: ['candidate_votes', 'candidate_share', 'outcome'],
-                    aggregation: 'NONE'  // How to handle multiple relationships between the same nodes
-                }
-            }
-        )
-            '''
-        )
+# def get_pageRank():
+#     with driver.session() as session:
+#         # session.run('CALL gds.graph.drop("elections_graph")')
+#         # Create the graph projection
+#         # session.run(
+#         #     '''
+#         #     CALL gds.graph.project(
+#         #         'elections_graph',
+#         #         {
+#         #             Candidate: {label: 'Candidate', properties: []},
+#         #             Political_Party: {label: 'Political_Party', properties: []},
+#         #             Constituency: {label: 'Constituency', properties: []}
+#         #         },
+#         #         {
+#         #             CONTESTED_BY: {
+#         #                 orientation: 'NATURAL',
+#         #                 aggregation: 'NONE',
+#                         #  type: 'CONTESTED_BY',
+#         #                 properties: ['candidate_votes', 'candidate_share', 'outcome']
+#         #             },
+#         #             AFFILIATED_WITH: {
+#         #                 orientation: 'UNDIRECTED',
+#         #                 aggregation: 'NONE',
+#         #                 type: 'AFFILIATED_WITH',
+#         #                 properties: []
+#         #             }
+#         #         }
+#         #     )
+#         #     '''
+#         # )
+#         session.run(
+#             '''
+#                     CALL gds.graph.project(
+#             'elections_graph',   // Name of the graph projection
+#             {   // Node projections
+#                 Candidate: {label: 'Candidate', properties: []},
+#                 Constituency: {label: 'Constituency', properties: []}
+#             },
+#             {   // Relationship projections
+#                 CONTESTED_BY: {
+#                     type: 'CONTESTED_BY',  // Specify the type of relationship
+#                     orientation: 'NATURAL',  // Directed from one node type to another
+#                     properties: ['candidate_votes', 'candidate_share', 'outcome'],
+#                     aggregation: 'NONE'  // How to handle multiple relationships between the same nodes
+#                 }
+#             }
+#         )
+#             '''
+#         )
 
-        # Query using PageRank algorithm
-        result = session.run(
-            '''
-            CALL gds.betweenness.stream('elections_graph')
-            YIELD nodeId, score
-            RETURN gds.util.asNode(nodeId).name AS name, score
-            ORDER BY score desc limit 10
-            '''
-        )
-        # Print results
-        for record in result:
-            print(record)
+#         # Query using PageRank algorithm
+#         result = session.run(
+#             '''
+#             CALL gds.betweenness.stream('elections_graph')
+#             YIELD nodeId, score
+#             RETURN gds.util.asNode(nodeId).name AS name, score
+#             ORDER BY score desc limit 10
+#             '''
+#         )
+#         # Print results
+#         for record in result:
+#             print(record)
         
-        # Drop the graph projection
-        session.run('CALL gds.graph.drop("elections_graph")')
-    # Close the session
-    session.close()
+#         # Drop the graph projection
+#         session.run('CALL gds.graph.drop("elections_graph")')
+#     # Close the session
+#     session.close()
 
     
 
-def projection():
+def machine_learning():
     # with driver.session() as session:
-    gds.graph.drop("elections_graph")
-    G, project_info = gds.graph.project(
-        "elections_graph",
-        {
-            "Candidate": {"label": "Candidate", "properties": []},
-            # "Political_Party": {"label": "Political_Party", "properties": []},
-            # "Constituency": {"label": "Constituency", "properties": []}
-        },
-        {
-            "CONTESTED_BY": {
-                "orientation": "NATURAL",  # Directed as per the relationship in Neo4j
-                "aggregation": "NONE",
-                "type": "CONTESTED_BY",
-                "properties": ["candidate_votes", "candidate_share", "outcome"]  # Assuming these are the field names in Neo4j
-            }
-            # "AFFILIATED_WITH": {
-            #     "orientation": "UNDIRECTED",
-            #     "aggregation": "NONE",
-            #     "type": "AFFILIATED_WITH",
-            #     "properties": []
-            # }
-        }
-    )
-    pagerank_result = gds.pageRank.stream(G)
-    print(pagerank_result[:10])
-    # pagerank_result = sorted(pagerank_result, key=lambda x: x['score'], reverse=True)
-    # for node in pagerank_result[:10]:  # Adjust the slice for more or fewer results
-    #     print(node)
-    gds.graph.drop("elections_graph")
+    query = """
+        MATCH (c:Constituency)-[:BELONGS_TO]->(p:Province),
+            (c)-[cb:CONTESTED_BY]->(can:Candidate)-[:AFFILIATED_WITH]->(party:Political_Party)
+        RETURN c.constituency_number AS constituency,
+            party.Name AS affiliated_party, 
+            p.Name AS province_of_constituency,
+            cb.candidate_votes AS votes, 
+            cb.candidate_share AS vote_share, 
+            cb.outcome AS outcome
+    """
+    with driver.session() as session:
+        df = pd.DataFrame(session.run(query))
+
+        df = df.rename(columns={0: 'constituency', 1: 'affiliated_party', 
+                                2: 'province', 3: 'vote_count', 4: 'vote_share', 5: 'outcome'})
+
+        df['constituency'] = df['constituency'].str.extract(r'(\d+)')
+        df['outcome'] = df['outcome'].apply(lambda x: 1 if x == 'Win' else 0)
+        df = pd.get_dummies(df, columns=['affiliated_party', 'province'])
+        # print(df)
+
+        df_X = df.drop('outcome', axis=1)
+        df_y = df[['outcome']]
+
+        X = df_X.values
+        y = df_y.values
+
+        y = LabelBinarizer().fit_transform(y)
+        
+        # Test/train data split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state=42, stratify=y)
+        
+        # Oversample only the training data
+        oversample = SMOTE(random_state=42)
+        X_train, y_train = oversample.fit_resample(X_train, y_train)
+
+        # Random forrest classification
+        model = RandomForestClassifier(n_estimators=500, random_state=42, max_depth=5, bootstrap=True, class_weight='balanced')
+        model = model.fit(X_train, y_train)
+        # Evaluate the model
+        cm_display = ConfusionMatrixDisplay.from_estimator(model, X_test, y_test, normalize= 'true')
+        roc_display = RocCurveDisplay.from_estimator(model, X_test, y_test, name="RF Model")
+
+        plt.figure(figsize=(10, 5))
+        cm_display.plot()
+        plt.title('Confusion Matrix')
+
+        # Plot ROC curve
+        plt.figure(figsize=(10, 5))
+        roc_display.plot()
+        plt.title('ROC Curve')
+
+        plt.show()
+
+    # gds.graph.drop("elections_graph")
+    # G, project_info = gds.graph.project(
+    #     "elections_graph",
+    #     {
+    #         "Candidate": {"label": "Candidate", "properties": []},
+    #         # "Political_Party": {"label": "Political_Party", "properties": []},
+    #         # "Constituency": {"label": "Constituency", "properties": []}
+    #     },
+    #     {
+    #         "CONTESTED_BY": {
+    #             "orientation": "NATURAL",  # Directed as per the relationship in Neo4j
+    #             "aggregation": "NONE",
+    #             "type": "CONTESTED_BY",
+    #             "properties": ["candidate_votes", "candidate_share", "outcome"]  # Assuming these are the field names in Neo4j
+    #         }
+    #         # "AFFILIATED_WITH": {
+    #         #     "orientation": "UNDIRECTED",
+    #         #     "aggregation": "NONE",
+    #         #     "type": "AFFILIATED_WITH",
+    #         #     "properties": []
+    #         # }
+    #     }
+    # )
+    # pagerank_result = gds.pageRank.stream(G)
+    # print(pagerank_result[:10])
+    # # pagerank_result = sorted(pagerank_result, key=lambda x: x['score'], reverse=True)
+    # # for node in pagerank_result[:10]:  # Adjust the slice for more or fewer results
+    # #     print(node)
+    # gds.graph.drop("elections_graph")
 
 def main():
     # fetch_data()
     # find_dominant_party()
     # find_multiyear_winners()
     # find_avg_voter_registration()
-    find_top_candidate_by_vote_share()
+    # find_top_candidate_by_vote_share()
     # projection()
     # get_pageRank()
+    machine_learning()
 
 if __name__ == '__main__':
     main()
