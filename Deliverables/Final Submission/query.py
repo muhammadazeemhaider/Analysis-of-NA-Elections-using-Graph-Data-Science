@@ -238,16 +238,14 @@ def machine_learning():
             (c)-[cb:CONTESTED_BY]->(can:Candidate)-[:AFFILIATED_WITH]->(party:Political_Party)
         RETURN c.constituency_number AS constituency,
             party.Name AS affiliated_party, 
-            p.Name AS province_of_constituency,
-            cb.candidate_votes AS votes, 
-            cb.candidate_share AS vote_share, 
+            p.Name AS province_of_constituency, 
             cb.outcome AS outcome
     """
     with driver.session() as session:
         df = pd.DataFrame(session.run(query))
 
         df = df.rename(columns={0: 'constituency', 1: 'affiliated_party', 
-                                2: 'province', 3: 'vote_count', 4: 'vote_share', 5: 'outcome'})
+                                2: 'province', 3: 'outcome'})
 
         df['constituency'] = df['constituency'].str.extract(r'(\d+)')
         df['outcome'] = df['outcome'].apply(lambda x: 1 if x == 'Win' else 0)
@@ -287,6 +285,106 @@ def machine_learning():
 
         plt.show()
 
+def machine_learning_pagerank():
+    # driver = GraphDatabase.driver("neo4j://localhost:7687", auth=("user", "password"))
+    with driver.session() as session:
+        # Create the in-memory graph projection
+        session.run('CALL gds.graph.drop("electionGraph")')
+        session.run("""
+        CALL gds.graph.project(
+                'electionGraph',
+                {
+                    Candidate: {label: 'Candidate', properties: []},
+                    Political_Party: {label: 'Political_Party', properties: []},
+                    Constituency: {label: 'Constituency', properties: []}
+                },
+                {
+                    CONTESTED_BY: {
+                        orientation: 'NATURAL',
+                        aggregation: 'NONE',
+                         type: 'CONTESTED_BY',
+                        properties: ['candidate_votes', 'candidate_share']
+                    },
+                    AFFILIATED_WITH: {
+                        orientation: 'UNDIRECTED',
+                        aggregation: 'NONE',
+                        type: 'AFFILIATED_WITH',
+                        properties: []
+                    }
+                }
+            )
+        """)
+
+        # Run PageRank on the in-memory graph
+        session.run("""
+        CALL gds.pageRank.write('electionGraph', {
+            maxIterations: 20,
+            dampingFactor: 0.85,
+            writeProperty: 'pageRank'
+        })
+        """)
+
+        # Run Jaccard similarity
+        # jaccard_result = session.run("""
+        # CALL gds.nodeSimilarity.stream('electionGraph')
+        # RETURN node1, node2, similarity
+        # """)
+
+        # Fetching the result with added PageRank
+        result = session.run("""
+        MATCH (c:Constituency)-[:BELONGS_TO]->(p:Province),
+              (c)-[cb:CONTESTED_BY]->(can:Candidate)-[:AFFILIATED_WITH]->(party:Political_Party)
+        RETURN c.constituency_number AS constituency,
+               party.name AS affiliated_party,
+               p.name AS province,
+               cb.outcome AS outcome,
+               can.pageRank AS candidatePageRank,
+               c.pageRank AS constituencyPageRank
+        """)
+
+        df = pd.DataFrame([dict(record) for record in result])
+
+        df['constituency'] = df['constituency'].str.extract(r'(\d+)')
+        df['outcome'] = df['outcome'].apply(lambda x: 1 if x == 'Win' else 0)
+        df = pd.get_dummies(df, columns=['affiliated_party', 'province'])
+        # print(df)
+
+        df_X = df.drop('outcome', axis=1)
+        df_y = df[['outcome']]
+
+        X = df_X.values
+        y = df_y.values
+
+        y = LabelBinarizer().fit_transform(y)
+        
+        # Test/train data split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state=42, stratify=y)
+        
+        # Oversample only the training data
+        oversample = SMOTE(random_state=42)
+        X_train, y_train = oversample.fit_resample(X_train, y_train)
+
+        # Random forrest classification
+        model = RandomForestClassifier(n_estimators=500, random_state=42, max_depth=5, bootstrap=True, class_weight='balanced')
+        model = model.fit(X_train, y_train)
+        # Evaluate the model
+        cm_display = ConfusionMatrixDisplay.from_estimator(model, X_test, y_test, normalize= 'true')
+        roc_display = RocCurveDisplay.from_estimator(model, X_test, y_test, name="RF Model")
+
+        plt.figure(figsize=(10, 5))
+        cm_display.plot()
+        plt.title('Confusion Matrix')
+
+        # Plot ROC curve
+        plt.figure(figsize=(10, 5))
+        roc_display.plot()
+        plt.title('ROC Curve')
+
+        plt.show()
+        session.run('CALL gds.graph.drop("electionGraph")')
+
+
+
     # gds.graph.drop("elections_graph")
     # G, project_info = gds.graph.project(
     #     "elections_graph",
@@ -325,7 +423,7 @@ def main():
     # find_top_candidate_by_vote_share()
     # projection()
     # get_pageRank()
-    machine_learning()
+    machine_learning_pagerank()
 
 if __name__ == '__main__':
     main()
