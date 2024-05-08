@@ -1,0 +1,61 @@
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///Candidates.csv" AS candidate RETURN candidate',
+    'MERGE (c:Candidate {id: candidate.candidateID, name: candidate.candidate_name})',
+    {batchSize: 1000, parallel: true}
+);
+
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///Constituency.csv" AS constituency_row RETURN constituency_row',
+    'MERGE (co:Constituency {
+        election_date: constituency_row.election_date,
+        constituency_number: constituency_row.constituency_number,
+        constituency_name: constituency_row.constituency_name,
+        voter_reg: TOINTEGER(constituency_row.voter_reg),
+        validated_votes: TOINTEGER(constituency_row.validated_votes),
+        votes_disq: TOINTEGER(constituency_row.votes_disq)
+    })',
+    {batchSize: 1000, parallel: true}
+);
+
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///Province.csv" AS province RETURN province',
+    'MERGE (p:Province {Name: province.Name})',
+    {batchSize: 1000, parallel: true}
+);
+
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///Political_Party.csv" AS political_party RETURN political_party',
+    'MERGE (pp:Political_Party {Name: political_party.Name})',
+    {batchSize: 1000, parallel: true}
+);
+
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///BELONGS_TO.csv" AS belongs_to RETURN belongs_to',
+    'MATCH (co:Constituency {constituency_number: belongs_to.Constituency_Number})
+    MATCH (p:Province {Name: belongs_to.Province_Name})
+    MERGE (co)-[:BELONGS_TO]->(p)',
+    {batchSize: 1000, parallel: true}
+);
+
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///AFFILIATED_WITH.csv" AS affiliated_with RETURN affiliated_with',
+    'MATCH (c:Candidate {name: affiliated_with.candidate_name})
+    MATCH (pp:Political_Party {Name: affiliated_with.candidate_party})
+    MERGE (c)-[:AFFILIATED_WITH]->(pp)',
+    {batchSize: 1000, parallel: true}
+);
+
+CALL apoc.periodic.iterate(
+    'LOAD CSV WITH HEADERS FROM "file:///CONTESTED_BY.csv" AS contested_by RETURN contested_by',
+    'MATCH (co:Constituency {
+        election_date: contested_by.election_date,
+        constituency_number: contested_by.constituency_number
+    })
+    MATCH (c:Candidate {id: contested_by.candidateID, name: contested_by.candidate_name})
+    MERGE (co)-[:CONTESTED_BY {
+        candidate_votes: TOINTEGER(contested_by.candidate_votes),
+        candidate_share: TOFLOAT(contested_by.candidate_share),
+        outcome: contested_by.outcome
+    }]->(c)',
+    {batchSize: 1000, parallel: true}
+);
