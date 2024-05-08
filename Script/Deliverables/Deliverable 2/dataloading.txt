@@ -51,7 +51,7 @@ CALL apoc.periodic.iterate(
         election_date: contested_by.election_date,
         constituency_number: contested_by.constituency_number
     })
-    MATCH (c:Candidate {id: contested_by.candidateID, name: contested_by.candidate_name})
+    MATCH (c:Candidate {id: contested_by.candidateID})
     MERGE (co)-[:CONTESTED_BY {
         candidate_votes: TOINTEGER(contested_by.candidate_votes),
         candidate_share: TOFLOAT(contested_by.candidate_share),
